@@ -1,53 +1,49 @@
+import aiohttp
 import asyncio
 import random
-import aiohttp
 
 BASE_URL = "http://127.0.0.1:8000/inventory"
 
 brands = ["Nike", "Adidas", "Puma"]
 items = ["T-shirt", "Jacket", "Shorts"]
 
+ADMIN_CREDENTIALS = {
+    "username": "shopkeeper",
+    "password": "adminpass"
+}
 
-async def clear_inventory():
-    """Delete all items in the inventory."""
+async def get_admin_token():
+    """Login as admin and return the access token."""
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{BASE_URL}/items") as resp:
-            data = await resp.json()
-            for item in data:
-                item_id = item["item_id"]
-                async with session.delete(f"{BASE_URL}/items/{item_id}") as r:
-                    print(await r.json())
-
+        async with session.post(
+            "http://127.0.0.1:8000/auth/admin/login",
+            data=ADMIN_CREDENTIALS  # form-encoded, not JSON
+        ) as resp:
+            resp_json = await resp.json()
+            if "access_token" not in resp_json:
+                raise Exception(f"Login failed: {resp_json}")
+            return resp_json["access_token"]
 
 async def populate_inventory():
-    """Insert all brand × item combos with random stock."""
+    ADMIN_TOKEN = await get_admin_token()
+    headers = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
     async with aiohttp.ClientSession() as session:
         for brand in brands:
             for name in items:
                 stock = random.randint(20, 50)
-                async with session.post(f"{BASE_URL}/items", json={
-                    "brand": brand,
+                price = random.randint(500, 2000)
+                data = {
                     "name": name,
-                    "stock": stock
-                }) as resp:
+                    "brand": brand,
+                    "description": f"{brand} {name}",
+                    "category": "Clothing",
+                    "quantity": str(stock),  # string is fine for Form
+                    "price": str(price)
+                }
+                async with session.post(f"{BASE_URL}/new", data=data, headers=headers) as resp:
+                    print(resp.status)
                     print(await resp.json())
 
-
-async def list_inventory():
-    """Print the final inventory."""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"{BASE_URL}/items") as resp:
-            data = await resp.json()
-            print("\nFinal Inventory:")
-            for item in data:
-                print(item)
-
-
-async def main():
-    await clear_inventory()
-    await populate_inventory()
-    await list_inventory()
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(populate_inventory())

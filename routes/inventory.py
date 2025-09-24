@@ -1,5 +1,5 @@
 import csv
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, Header
 
 from routes.auth import sessions
 from database import APIDatabase, get_db
@@ -7,7 +7,10 @@ from database import APIDatabase, get_db
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
-def require_admin(token: str = Form(...)):
+def require_admin(authorization: str = Header(...)):
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    token = authorization[7:]
     if token not in sessions or sessions[token]["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return sessions[token]
@@ -16,7 +19,9 @@ def require_admin(token: str = Form(...)):
 @router.get("/list")
 async def list_items(admin=Depends(require_admin), db: APIDatabase = Depends(get_db)):
     try:
-        return await db.list_items()
+        items = await db.list_items()
+        print(items)  # debug: see what fields are actually returned
+        return items
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list items: {str(e)}")
 
